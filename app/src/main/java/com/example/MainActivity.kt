@@ -139,8 +139,18 @@ class MainActivity : ComponentActivity() {
                         sharedPrefs.edit().putString("fcm_token", token).apply()
                     }
                 }
+            
+            // Subscribe to "all" FCM topic so topic messages are received
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().subscribeToTopic("all")
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        Log.d("MonelinkFCM", "Successfully subscribed to 'all' topic")
+                    } else {
+                        Log.e("MonelinkFCM", "Failed to subscribe to 'all' topic")
+                    }
+                }
         } catch (e: Exception) {
-            Log.e("MonelinkFCM", "Failed to fetch FCM token", e)
+            Log.e("MonelinkFCM", "Failed to fetch FCM token or subscribe to topic", e)
         }
     }
 
