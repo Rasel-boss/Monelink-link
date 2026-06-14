@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "390975242819",
+    "project_id": "monelink-push-notification",
+    "storage_bucket": "monelink-push-notification.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:390975242819:android:43e9f21c83f62057558af6",
+        "android_client_info": {
+          "package_name": "com.aistudio.monelink.vbxwz"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCQjnsPSoX3pVnkedxRcGqG_zMFUWXkm3A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

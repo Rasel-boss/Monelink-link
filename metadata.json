@@ -1,0 +1,6 @@
+{
+  "name": "Monelink",
+  "description": "Access your Monelink account and shorten URLs with ease. Quickly navigate monelink.top in this high-speed, secure mobile browser wrapper.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
