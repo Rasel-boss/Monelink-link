@@ -10,6 +10,11 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import com.example.data.AppDatabase
+import com.example.data.NotificationEntity
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
@@ -29,7 +34,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         // Handle notification payload
         remoteMessage.notification?.let {
             Log.d(TAG, "Notification Message Body: ${it.body}")
-            sendNotification(it.title ?: "Monelink Notification", it.body ?: "")
+            val title = it.title ?: "Monelink Notification"
+            val body = it.body ?: ""
+            saveNotificationToDatabase(title, body)
+            sendNotification(title, body)
             return
         }
 
@@ -38,7 +46,20 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             Log.d(TAG, "Message data payload: ${remoteMessage.data}")
             val title = remoteMessage.data["title"] ?: "Monelink notification"
             val body = remoteMessage.data["body"] ?: ""
+            saveNotificationToDatabase(title, body)
             sendNotification(title, body)
+        }
+    }
+
+    private fun saveNotificationToDatabase(title: String, body: String) {
+        try {
+            val database = AppDatabase.getDatabase(applicationContext)
+            val notification = NotificationEntity(title = title, body = body)
+            CoroutineScope(Dispatchers.IO).launch {
+                database.notificationDao().insertNotification(notification)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save notification to database", e)
         }
     }
 

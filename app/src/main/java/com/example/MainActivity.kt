@@ -57,6 +57,17 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Close
+import com.example.data.AppDatabase
+import com.example.data.NotificationEntity
+import com.example.data.NotificationRepository
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import android.text.format.DateUtils
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -65,6 +76,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -218,7 +230,13 @@ fun MonelinkApp(
     var isOffline by remember { mutableStateOf(!isInternetAvailable(context)) }
     
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
-    var showInfoDialog by remember { mutableStateOf(false) }
+    
+    // Room database states for push notifications
+    val database = remember { AppDatabase.getDatabase(context) }
+    val repository = remember { NotificationRepository(database.notificationDao()) }
+    val notifications by repository.allNotifications.collectAsStateWithLifecycle(initialValue = emptyList())
+    val coroutineScope = rememberCoroutineScope()
+    var showNotificationInbox by remember { mutableStateOf(false) }
 
     // Intercept hardware Android back button to navigate WebView history
     BackHandler(enabled = canGoBack) {
@@ -404,17 +422,16 @@ fun MonelinkApp(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                    .padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 4.dp),
                 color = Color.White,
-                shape = RoundedCornerShape(16.dp),
-                shadowElevation = 2.dp,
+                shape = RoundedCornerShape(12.dp),
+                shadowElevation = 1.dp,
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEADDFF).copy(alpha = 0.8f))
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -425,33 +442,33 @@ fun MonelinkApp(
                         // Small native green visual indicator dot showing "connected/active" status
                         Box(
                             modifier = Modifier
-                                .size(10.dp)
+                                .size(8.dp)
                                 .clip(CircleShape)
                                 .background(if (isOffline) Color.Red else Color(0xFF10B981))
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         
                         // Geometric Balance Badge Logo Box ("M" in white on Purple container)
                         Box(
                             modifier = Modifier
-                                .size(34.dp)
-                                .background(Color(0xFF6750A4), RoundedCornerShape(8.dp)),
+                                .size(28.dp)
+                                .background(Color(0xFF6750A4), RoundedCornerShape(6.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "M",
                                 color = Color.White,
-                                fontSize = 16.sp,
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         
                         Column {
                             Text(
                                 text = pageTitle,
                                 color = Color(0xFF1D1B20),
-                                fontSize = 14.sp,
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -459,7 +476,7 @@ fun MonelinkApp(
                             Text(
                                 text = currentUrl.replace("https://", "").replace("http://", ""),
                                 color = Color(0xFF49454F),
-                                fontSize = 11.sp,
+                                fontSize = 9.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -472,46 +489,58 @@ fun MonelinkApp(
                         // Copy link button
                         IconButton(
                             onClick = { copyToClipboard(context, currentUrl) },
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(30.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.ContentCopy,
                                 contentDescription = "Copy Link",
                                 tint = Color(0xFF49454F),
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(2.dp))
+                        Spacer(modifier = Modifier.width(1.dp))
                         // Open in Chrome / system browser
                         IconButton(
                             onClick = { openInSystemBrowser(context, currentUrl) },
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(30.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Language,
                                 contentDescription = "Open in Browser",
                                 tint = Color(0xFF49454F),
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
                         
-                        // Profile Avatar matching Geometric Balance design specification
+                        // Notification bell button with dynamic unread badge count
+                        val unreadCount = notifications.count { !it.isRead }
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
+                                .size(28.dp)
                                 .clip(CircleShape)
                                 .background(Color(0xFFEADDFF))
-                                .border(1.5.dp, Color(0xFFD0BCFF), CircleShape)
-                                .clickable { showInfoDialog = true },
+                                .border(1.dp, Color(0xFFD0BCFF), CircleShape)
+                                .clickable { 
+                                    showNotificationInbox = true 
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = "Profile",
+                                imageVector = if (unreadCount > 0) Icons.Default.NotificationsActive else Icons.Default.Notifications,
+                                contentDescription = "Notifications",
                                 tint = Color(0xFF21005D),
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp)
                             )
+                            if (unreadCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .align(Alignment.TopEnd)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFB3261E)) // Material 3 Error Red color
+                                )
+                            }
                         }
                     }
                 }
@@ -623,6 +652,9 @@ fun MonelinkApp(
                                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                                 android.view.ViewGroup.LayoutParams.MATCH_PARENT
                             )
+
+                            // Enforce hardware acceleration on GPU for exceptionally smooth scrolling and transitions
+                            setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
 
                             // Apply premium enterprise-grade webview configurations
                             settings.apply {
@@ -750,132 +782,296 @@ fun MonelinkApp(
                     },
                     modifier = Modifier.fillMaxSize()
                 )
+
+                // Beautiful full-screen preloader overlay that fades out once loading is complete (showing content as soon as 85% is loaded)
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = isLoading && progress < 0.85f && !isOffline,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0xFFFEF7FF)), // Modern, light surface color matching the theme
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            // Centered loading logo/animation area matching the theme
+                            Box(
+                                contentAlignment = Alignment.Center
+                            ) {
+                                // Circular loading indicator surrounding the logo
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(72.dp),
+                                    color = Color(0xFF6750A4),
+                                    strokeWidth = 3.dp,
+                                    trackColor = Color(0xFFEADDFF).copy(alpha = 0.4f)
+                                )
+                                
+                                // Clean Geometric Brand Symbol "M" inside a circular container
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF6750A4)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "M",
+                                        color = Color.White,
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(24.dp))
+                            
+                            // Elegant modern text instructions below
+                            Text(
+                                text = "Loading secure connection...",
+                                color = Color(0xFF21005D),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            
+                            Spacer(modifier = Modifier.height(4.dp))
+                            
+                            Text(
+                                text = "Please wait a moment",
+                                color = Color(0xFF49454F),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 
-    if (showInfoDialog) {
-        val sharedPrefs = context.getSharedPreferences("monelink_prefs", Context.MODE_PRIVATE)
-        val fcmToken = sharedPrefs.getString("fcm_token", null) ?: "FCM token not received yet. Please check internet and reopen app."
-        
+    if (showNotificationInbox) {
+        // Mark all notifications as read when inbox starts
+        LaunchedEffect(notifications) {
+            if (notifications.any { !it.isRead }) {
+                coroutineScope.launch {
+                    repository.markAllAsRead()
+                }
+            }
+        }
+
         androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showInfoDialog = false },
+            onDismissRequest = { showNotificationInbox = false },
             title = {
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(Color(0xFF6750A4), RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color(0xFF6750A4), RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Inbox",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                         Text(
-                            text = "M",
-                            color = Color.White,
+                            text = "Inbox",
+                            color = Color(0xFF21005D),
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    Text(
-                        text = "FCM Notification Setup",
-                        color = Color(0xFF21005D),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    IconButton(
+                        onClick = { showNotificationInbox = false },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color(0xFF49454F),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             },
             text = {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 360.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text(
-                        text = "Copy the unique token below to test sending Firebase Push Notifications to this device.",
-                        fontSize = 13.sp,
-                        color = Color(0xFF49454F)
-                    )
-                    
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFFF3EDF7), RoundedCornerShape(12.dp))
-                            .border(1.dp, Color(0xFFEADDFF), RoundedCornerShape(12.dp))
-                            .padding(12.dp)
-                    ) {
-                        Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                    if (notifications.isEmpty()) {
+                        // Beautiful elegant empty state illustration in English
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFF3EDF7)),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = "YOUR DEVICE TOKEN",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF6750A4)
-                                )
-                                Text(
-                                    text = "Click to Copy",
-                                    fontSize = 9.sp,
-                                    color = Color(0xFF49454F).copy(alpha = 0.7f)
+                                Icon(
+                                    imageVector = Icons.Default.Notifications,
+                                    contentDescription = "Empty notifications",
+                                    tint = Color(0x666750A4),
+                                    modifier = Modifier.size(32.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = fcmToken,
+                                text = "No Notifications",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1D1B20)
+                            )
+                            Text(
+                                text = "All future push notifications will appear here.",
                                 fontSize = 11.sp,
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                color = Color(0xFF1D1B20),
-                                modifier = Modifier.clickable {
-                                    copyToClipboard(context, fcmToken)
-                                }
+                                color = Color(0xFF49454F),
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                lineHeight = 16.sp
                             )
                         }
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 280.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            notifications.forEach { message ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (message.isRead) Color(0xFFFBF8FD) else Color(0xFFF3EDF7)
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.Top,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.weight(1f),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(8.dp)
+                                                    .align(Alignment.CenterVertically)
+                                                    .clip(CircleShape)
+                                                    .background(if (message.isRead) Color.Transparent else Color(0xFF6750A4))
+                                            )
+                                            Column(
+                                                modifier = Modifier.weight(1f),
+                                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                                                    ) {
+                                                Text(
+                                                    text = message.title,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF1D1B20)
+                                                )
+                                                Text(
+                                                    text = message.body,
+                                                    fontSize = 12.sp,
+                                                    color = Color(0xFF49454F),
+                                                    lineHeight = 16.sp
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = try {
+                                                        DateUtils.getRelativeTimeSpanString(
+                                                            message.timestamp,
+                                                            System.currentTimeMillis(),
+                                                            DateUtils.MINUTE_IN_MILLIS,
+                                                            DateUtils.FORMAT_ABBREV_RELATIVE
+                                                        ).toString()
+                                                    } catch (e: Exception) {
+                                                        "Just now"
+                                                    },
+                                                    fontSize = 10.sp,
+                                                    color = Color(0xFF49454F).copy(alpha = 0.6f)
+                                                )
+                                            }
+                                        }
+                                        IconButton(
+                                            onClick = {
+                                                coroutineScope.launch {
+                                                    repository.deleteNotificationById(message.id)
+                                                }
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Delete Single Alert",
+                                                tint = Color(0xFF49454F).copy(alpha = 0.5f),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Clean up all history button
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                androidx.compose.material3.TextButton(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            repository.clearAllNotifications()
+                                        }
+                                    },
+                                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                                        contentColor = Color(0xFFB3261E)
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Clear All",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Clear All",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
                     }
-                    
-                    Button(
-                        onClick = { copyToClipboard(context, fcmToken) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF6750A4)
-                        ),
-                        shape = RoundedCornerShape(100),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "Copy FCM Token",
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    
-                    Text(
-                        text = "How to send a Test Notification:",
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1D1B20),
-                        fontSize = 14.sp
-                    )
-                    
-                    Text(
-                        text = "1. Open your Firebase Console\n" +
-                               "2. Go to Engage -> Messaging\n" +
-                               "3. Click 'Create your first campaign'\n" +
-                               "4. Select 'Firebase Notification messages' and enter details\n" +
-                               "5. Click 'Send test message', paste this token, and click Test!",
-                        fontSize = 12.sp,
-                        color = Color(0xFF49454F),
-                        lineHeight = 18.sp
-                    )
                 }
             },
             confirmButton = {
                 androidx.compose.material3.TextButton(
-                    onClick = { showInfoDialog = false }
+                    onClick = { showNotificationInbox = false }
                 ) {
                     Text("Close", color = Color(0xFF6750A4), fontWeight = FontWeight.Bold)
                 }
