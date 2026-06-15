@@ -9,5 +9,6 @@ data class NotificationEntity(
     val title: String,
     val body: String,
     val timestamp: Long = System.currentTimeMillis(),
-    val isRead: Boolean = false
+    val isRead: Boolean = false,
+    val url: String? = null
 )

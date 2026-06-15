@@ -65,6 +65,7 @@ import com.example.data.AppDatabase
 import com.example.data.NotificationEntity
 import com.example.data.NotificationRepository
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import android.text.format.DateUtils
@@ -90,6 +91,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -208,6 +211,76 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+        
+        // Handle incoming notification payload on cold start
+        handleNotificationIntent(intent)
+    }
+
+    private fun handleNotificationIntent(intent: Intent?) {
+        val bundle = intent?.extras ?: return
+        
+        // Log all bundle keys for debugging
+        try {
+            for (key in bundle.keySet()) {
+                Log.d("MonelinkFCM", "Intent extra: $key -> ${bundle.get(key)}")
+            }
+        } catch (e: Exception) {
+            Log.e("MonelinkFCM", "Error logging intent keys", e)
+        }
+        
+        // Extract title using alternative key mappings safely (using .get()?.toString())
+        val title = bundle.get("gcm.notification.title")?.toString()
+            ?: bundle.get("title")?.toString()
+            ?: bundle.get("gcm.n.title")?.toString()
+            ?: bundle.get("subject")?.toString()
+            ?: bundle.get("header")?.toString()
+            
+        // Extract body using alternative key mappings safely
+        val body = bundle.get("gcm.notification.body")?.toString()
+            ?: bundle.get("body")?.toString()
+            ?: bundle.get("gcm.n.body")?.toString()
+            ?: bundle.get("message")?.toString()
+            ?: bundle.get("alert")?.toString()
+            ?: bundle.get("description")?.toString()
+            ?: bundle.get("text")?.toString()
+
+        if (title.isNullOrEmpty() && body.isNullOrEmpty()) {
+            Log.d("MonelinkFCM", "Notification Intent ignored: both title and body are empty.")
+            return
+        }
+
+        val finalTitle = title ?: "Monelink notification"
+        val finalBody = body ?: ""
+        
+        // Extract URL using alternative links
+        val finalUrl = bundle.get("url")?.toString()
+            ?: bundle.get("link")?.toString()
+            ?: bundle.get("click_action")?.toString()
+            ?: bundle.get("uri")?.toString()
+            ?: bundle.get("href")?.toString()
+            ?: bundle.get("action_url")?.toString()
+
+        // Avoid inserting standard duplicate elements on app open if it was already saved
+        val database = com.example.data.AppDatabase.getDatabase(applicationContext)
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                val notification = com.example.data.NotificationEntity(
+                    title = finalTitle,
+                    body = finalBody,
+                    url = finalUrl
+                )
+                database.notificationDao().insertNotification(notification)
+                Log.d("MonelinkFCM", "Saved Notification from Intent to database: $finalTitle, URL: $finalUrl")
+            } catch (e: Exception) {
+                Log.e("MonelinkFCM", "Failed to save Notification from Intent to database", e)
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNotificationIntent(intent)
     }
 }
 
@@ -811,19 +884,18 @@ fun MonelinkApp(
                                     trackColor = Color(0xFFEADDFF).copy(alpha = 0.4f)
                                 )
                                 
-                                // Clean Geometric Brand Symbol "M" inside a circular container
+                                // Beautiful Official MoneLink Logo inside a circular container
                                 Box(
                                     modifier = Modifier
                                         .size(44.dp)
                                         .clip(CircleShape)
-                                        .background(Color(0xFF6750A4)),
+                                        .background(Color.White),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        text = "M",
-                                        color = Color.White,
-                                        fontSize = 18.sp,
-                                        fontWeight = FontWeight.Bold
+                                    Image(
+                                        painter = painterResource(id = R.drawable.monelink_logo_1781106132605),
+                                        contentDescription = "MoneLink Logo",
+                                        modifier = Modifier.fillMaxSize()
                                     )
                                 }
                             }
@@ -1001,7 +1073,66 @@ fun MonelinkApp(
                                                     color = Color(0xFF49454F),
                                                     lineHeight = 16.sp
                                                 )
-                                                Spacer(modifier = Modifier.height(2.dp))
+                                                if (!message.url.isNullOrBlank()) {
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                    Row(
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        androidx.compose.material3.TextButton(
+                                                            onClick = {
+                                                                webViewInstance?.loadUrl(message.url)
+                                                                showNotificationInbox = false
+                                                            },
+                                                            colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                                                                contentColor = Color(0xFF6750A4)
+                                                            ),
+                                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                                            modifier = Modifier.height(28.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Language,
+                                                                contentDescription = "Open in App",
+                                                                modifier = Modifier.size(14.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(4.dp))
+                                                            Text(
+                                                                text = "অ্যাপে দেখুন",
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                        }
+
+                                                        androidx.compose.material3.OutlinedButton(
+                                                            onClick = {
+                                                                try {
+                                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(message.url))
+                                                                    context.startActivity(intent)
+                                                                } catch (e: Exception) {
+                                                                    Toast.makeText(context, "Cannot open link", Toast.LENGTH_SHORT).show()
+                                                                }
+                                                            },
+                                                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF6750A4).copy(alpha = 0.3f)),
+                                                            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                                                                contentColor = Color(0xFF6750A4)
+                                                            ),
+                                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                                            modifier = Modifier.height(28.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Share,
+                                                                contentDescription = "Open in Browser",
+                                                                modifier = Modifier.size(13.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(4.dp))
+                                                            Text(
+                                                                text = "ব্রাউজারে দেখুন",
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.height(4.dp))
                                                 Text(
                                                     text = try {
                                                         DateUtils.getRelativeTimeSpanString(
@@ -1029,40 +1160,11 @@ fun MonelinkApp(
                                             Icon(
                                                 imageVector = Icons.Default.Delete,
                                                 contentDescription = "Delete Single Alert",
-                                                tint = Color(0xFF49454F).copy(alpha = 0.5f),
+                                                tint = Color(0xFFBA1A1A).copy(alpha = 0.7f),
                                                 modifier = Modifier.size(16.dp)
                                             )
                                         }
                                     }
-                                }
-                            }
-                            
-                            // Clean up all history button
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                androidx.compose.material3.TextButton(
-                                    onClick = {
-                                        coroutineScope.launch {
-                                            repository.clearAllNotifications()
-                                        }
-                                    },
-                                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                                        contentColor = Color(0xFFB3261E)
-                                    )
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Clear All",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Clear All",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
                                 }
                             }
                         }
@@ -1070,10 +1172,48 @@ fun MonelinkApp(
                 }
             },
             confirmButton = {
-                androidx.compose.material3.TextButton(
-                    onClick = { showNotificationInbox = false }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Close", color = Color(0xFF6750A4), fontWeight = FontWeight.Bold)
+                    if (notifications.isNotEmpty()) {
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    repository.clearAllNotifications()
+                                }
+                            },
+                            colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                                contentColor = Color(0xFFBA1A1A)
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Clear All",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "সব মুছে ফেলুন (Clear All)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.width(1.dp))
+                    }
+
+                    androidx.compose.material3.TextButton(
+                        onClick = { showNotificationInbox = false }
+                    ) {
+                        Text(
+                            text = "বন্ধ করুন (Close)",
+                            color = Color(0xFF6750A4),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             },
             containerColor = Color.White,

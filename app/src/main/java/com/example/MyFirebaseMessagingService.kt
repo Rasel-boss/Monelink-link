@@ -31,41 +31,67 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         super.onMessageReceived(remoteMessage)
         Log.d(TAG, "From: ${remoteMessage.from}")
 
+        val url = remoteMessage.data["url"] 
+            ?: remoteMessage.data["link"] 
+            ?: remoteMessage.data["click_action"]
+            ?: remoteMessage.data["uri"]
+            ?: remoteMessage.data["href"]
+            ?: remoteMessage.data["action_url"]
+
         // Handle notification payload
         remoteMessage.notification?.let {
             Log.d(TAG, "Notification Message Body: ${it.body}")
             val title = it.title ?: "Monelink Notification"
             val body = it.body ?: ""
-            saveNotificationToDatabase(title, body)
-            sendNotification(title, body)
+            saveNotificationToDatabase(title, body, url)
+            sendNotification(title, body, url)
             return
         }
 
         // Handle data payload (if any)
         if (remoteMessage.data.isNotEmpty()) {
             Log.d(TAG, "Message data payload: ${remoteMessage.data}")
-            val title = remoteMessage.data["title"] ?: "Monelink notification"
-            val body = remoteMessage.data["body"] ?: ""
-            saveNotificationToDatabase(title, body)
-            sendNotification(title, body)
+            
+            val title = remoteMessage.data["title"]
+                ?: remoteMessage.data["subject"]
+                ?: remoteMessage.data["header"]
+                ?: "Monelink Notification"
+                
+            val body = remoteMessage.data["body"]
+                ?: remoteMessage.data["message"]
+                ?: remoteMessage.data["alert"]
+                ?: remoteMessage.data["text"]
+                ?: remoteMessage.data["description"]
+                ?: ""
+                
+            saveNotificationToDatabase(title, body, url)
+            sendNotification(title, body, url)
         }
     }
 
-    private fun saveNotificationToDatabase(title: String, body: String) {
+    private fun saveNotificationToDatabase(title: String, body: String, url: String? = null) {
         try {
             val database = AppDatabase.getDatabase(applicationContext)
-            val notification = NotificationEntity(title = title, body = body)
-            CoroutineScope(Dispatchers.IO).launch {
-                database.notificationDao().insertNotification(notification)
+            val notification = NotificationEntity(title = title, body = body, url = url)
+            kotlinx.coroutines.runBlocking {
+                try {
+                    database.notificationDao().insertNotification(notification)
+                    Log.d(TAG, "Saved Notification to DB: $title, URL: $url")
+                } catch (dbError: Exception) {
+                    Log.e(TAG, "Room Database Insert Error", dbError)
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save notification to database", e)
         }
     }
 
-    private fun sendNotification(title: String, messageBody: String) {
+    private fun sendNotification(title: String, messageBody: String, url: String? = null) {
         val intent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            url?.let { putExtra("url", it) }
+            putExtra("title", title)
+            putExtra("body", messageBody)
         }
         
         val pendingIntent = PendingIntent.getActivity(
