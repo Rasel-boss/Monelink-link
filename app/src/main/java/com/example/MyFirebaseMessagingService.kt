@@ -8,6 +8,10 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
@@ -114,14 +118,41 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         )
 
         val channelId = "monelink_fcm_channel"
+        
+        // Generate high quality Large Icon from app logo safely
+        var largeIcon: Bitmap? = null
+        try {
+            val drawable = ContextCompat.getDrawable(this, R.drawable.monelink_logo_1781106132605)
+            if (drawable is BitmapDrawable) {
+                largeIcon = drawable.bitmap
+            } else if (drawable != null) {
+                val bitmap = Bitmap.createBitmap(
+                    drawable.intrinsicWidth.takeIf { it > 0 } ?: 120,
+                    drawable.intrinsicHeight.takeIf { it > 0 } ?: 120,
+                    Bitmap.Config.ARGB_8888
+                )
+                val canvas = Canvas(bitmap)
+                drawable.setBounds(0, 0, canvas.width, canvas.height)
+                drawable.draw(canvas)
+                largeIcon = bitmap
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error generating large icon from app logo", e)
+        }
+
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(android.R.drawable.ic_dialog_info) // Standard clean material style fallback icon
+            .setSmallIcon(R.drawable.ic_notification_custom) // Standard white transparent notification custom bell icon
             .setContentTitle(title)
             .setContentText(messageBody)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(pendingIntent)
+            .setColor(0xFF6750A4.toInt()) // Beautiful Material 3 primary purple color matching app UI
+            
+        if (largeIcon != null) {
+            notificationBuilder.setLargeIcon(largeIcon)
+        }
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 

@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -601,10 +602,10 @@ fun MonelinkApp(
                         val unreadCount = notifications.count { !it.isRead }
                         Box(
                             modifier = Modifier
-                                .size(28.dp)
+                                .size(36.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFEADDFF))
-                                .border(1.dp, Color(0xFFD0BCFF), CircleShape)
+                                .background(Color(0xFF6750A4).copy(alpha = 0.12f))
+                                .border(1.2.dp, Color(0xFF6750A4).copy(alpha = 0.35f), CircleShape)
                                 .clickable { 
                                     showNotificationInbox = true 
                                 },
@@ -613,17 +614,29 @@ fun MonelinkApp(
                             Icon(
                                 imageVector = if (unreadCount > 0) Icons.Default.NotificationsActive else Icons.Default.Notifications,
                                 contentDescription = "Notifications",
-                                tint = Color(0xFF21005D),
-                                modifier = Modifier.size(16.dp)
+                                tint = Color(0xFF6750A4),
+                                modifier = Modifier.size(20.dp)
                             )
                             if (unreadCount > 0) {
+                                val badgeText = if (unreadCount > 9) "9+" else unreadCount.toString()
                                 Box(
                                     modifier = Modifier
-                                        .size(8.dp)
                                         .align(Alignment.TopEnd)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFFB3261E)) // Material 3 Error Red color
-                                )
+                                        .offset(x = 5.dp, y = (-4).dp)
+                                        .background(Color(0xFFBA1A1A), CircleShape)
+                                        .border(1.dp, Color.White, CircleShape)
+                                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = badgeText,
+                                        color = Color.White,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        lineHeight = 10.sp,
+                                        modifier = Modifier.padding(horizontal = 1.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -1042,6 +1055,15 @@ fun MonelinkApp(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             notifications.forEach { message ->
+                                val cleanUrl = remember(message.url) {
+                                    if (message.url.isNullOrBlank()) null
+                                    else {
+                                        val trimmed = message.url.trim()
+                                        if (trimmed.equals("null", ignoreCase = true)) null
+                                        else if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) trimmed
+                                        else "https://$trimmed"
+                                    }
+                                }
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth(),
@@ -1084,14 +1106,14 @@ fun MonelinkApp(
                                                     color = Color(0xFF49454F),
                                                     lineHeight = 16.sp
                                                 )
-                                                if (!message.url.isNullOrBlank()) {
+                                                if (cleanUrl != null) {
                                                     Spacer(modifier = Modifier.height(8.dp))
                                                     Row(
                                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                     ) {
                                                         androidx.compose.material3.TextButton(
                                                             onClick = {
-                                                                webViewInstance?.loadUrl(message.url)
+                                                                webViewInstance?.loadUrl(cleanUrl)
                                                                 showNotificationInbox = false
                                                             },
                                                             colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
@@ -1116,7 +1138,7 @@ fun MonelinkApp(
                                                         androidx.compose.material3.OutlinedButton(
                                                             onClick = {
                                                                 try {
-                                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(message.url))
+                                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(cleanUrl))
                                                                     context.startActivity(intent)
                                                                 } catch (e: Exception) {
                                                                     Toast.makeText(context, "Cannot open link", Toast.LENGTH_SHORT).show()
