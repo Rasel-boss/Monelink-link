@@ -20,6 +20,9 @@ interface NotificationDao {
     @Query("UPDATE notifications SET isRead = 1")
     suspend fun markAllAsRead()
 
+    @Query("SELECT * FROM notifications ORDER BY timestamp DESC LIMIT 10")
+    suspend fun getRecentNotifications(): List<NotificationEntity>
+
     @Query("DELETE FROM notifications WHERE id = :id")
     suspend fun deleteNotificationById(id: Int)
 

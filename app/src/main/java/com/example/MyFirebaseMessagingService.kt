@@ -72,11 +72,22 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     private fun saveNotificationToDatabase(title: String, body: String, url: String? = null) {
         try {
             val database = AppDatabase.getDatabase(applicationContext)
-            val notification = NotificationEntity(title = title, body = body, url = url)
             kotlinx.coroutines.runBlocking {
                 try {
-                    database.notificationDao().insertNotification(notification)
-                    Log.d(TAG, "Saved Notification to DB: $title, URL: $url")
+                    val recent = database.notificationDao().getRecentNotifications()
+                    val isDuplicate = recent.any { 
+                        it.title == title && 
+                        it.body == body && 
+                        it.url == url && 
+                        Math.abs(it.timestamp - System.currentTimeMillis()) < 60000 
+                    }
+                    if (!isDuplicate) {
+                        val notification = NotificationEntity(title = title, body = body, url = url)
+                        database.notificationDao().insertNotification(notification)
+                        Log.d(TAG, "Saved Notification to DB: $title, URL: $url")
+                    } else {
+                        Log.d(TAG, "Duplicate notification detected in Service, skipping DB save.")
+                    }
                 } catch (dbError: Exception) {
                     Log.e(TAG, "Room Database Insert Error", dbError)
                 }
@@ -94,11 +105,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             putExtra("body", messageBody)
         }
         
+        val notificationId = System.currentTimeMillis().toInt()
         val pendingIntent = PendingIntent.getActivity(
             this, 
-            0, 
+            notificationId, 
             intent,
-            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val channelId = "monelink_fcm_channel"

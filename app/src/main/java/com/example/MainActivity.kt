@@ -264,13 +264,24 @@ class MainActivity : ComponentActivity() {
         val database = com.example.data.AppDatabase.getDatabase(applicationContext)
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             try {
-                val notification = com.example.data.NotificationEntity(
-                    title = finalTitle,
-                    body = finalBody,
-                    url = finalUrl
-                )
-                database.notificationDao().insertNotification(notification)
-                Log.d("MonelinkFCM", "Saved Notification from Intent to database: $finalTitle, URL: $finalUrl")
+                val recent = database.notificationDao().getRecentNotifications()
+                val isDuplicate = recent.any { 
+                    it.title == finalTitle && 
+                    it.body == finalBody && 
+                    it.url == finalUrl && 
+                    Math.abs(it.timestamp - System.currentTimeMillis()) < 60000 
+                }
+                if (!isDuplicate) {
+                    val notification = com.example.data.NotificationEntity(
+                        title = finalTitle,
+                        body = finalBody,
+                        url = finalUrl
+                    )
+                    database.notificationDao().insertNotification(notification)
+                    Log.d("MonelinkFCM", "Saved Notification from Intent to database: $finalTitle, URL: $finalUrl")
+                } else {
+                    Log.d("MonelinkFCM", "Duplicate notification detected from Intent, skipping save.")
+                }
             } catch (e: Exception) {
                 Log.e("MonelinkFCM", "Failed to save Notification from Intent to database", e)
             }
